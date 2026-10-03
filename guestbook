@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Guestbook</title>
+<link href="https://fonts.googleapis.com/css2?family=Anonymous+Pro:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+  html, body { margin:0; height:100%; background:transparent; }
+  /* Tamaño de letra: cambiá 14px por 12px, 10px, etc. */
+  #gb { --size:14px; --ink:#1b1f23; --line:#b9c0c7; --accent:#2a5bd7;
+    width:100%; height:100%; box-sizing:border-box; padding:10px; display:flex; flex-direction:column; gap:8px;
+    background:transparent; border:1px solid var(--line); color:var(--ink);
+    font:400 var(--size)/1.3 "Anonymous Pro", "Courier New", monospace; }
+  #gb * { box-sizing:border-box; font:inherit; }
+  #list { flex:1; overflow-y:auto; min-height:0; }
+  .c { padding:0 0 6px; margin:0 0 6px; border-bottom:1px dashed var(--line); overflow-wrap:anywhere; }
+  .c b { color:var(--accent); font-weight:700; }
+  .d { color:#6b737b; font-size:.85em; margin-left:6px; }
+  .t { white-space:pre-wrap; }
+  .msg { color:#6b737b; font-style:italic; }
+  textarea, input { width:100%; border:1px solid var(--line); background:transparent; color:var(--ink); padding:4px 6px; border-radius:0; }
+  textarea { height:72px; resize:none; }
+  #row { display:flex; gap:6px; }
+  #row input { flex:1; min-width:0; }
+  button { border:1px solid var(--ink); background:var(--ink); color:#fff; padding:0 12px; cursor:pointer; font-weight:700; }
+  button:hover { background:var(--accent); border-color:var(--accent); }
+  button:disabled { opacity:.5; cursor:default; }
+  :focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+  @media (max-width:170px) {
+    #gb { --size:11px; padding:6px; }
+    textarea { height:42px; }
+    #row { flex-direction:column; }
+    #row input, #row button { height:22px; }
+  }
+</style>
+</head>
+<body>
+<div id="gb">
+  <div id="list" aria-live="polite"></div>
+  <div id="status" class="msg"></div>
+  <textarea id="txt" maxlength="300" placeholder="Escribí tu mensaje" aria-label="Mensaje"></textarea>
+  <div id="row">
+    <input id="nm" maxlength="20" placeholder="Nombre" aria-label="Nombre">
+    <button id="go" type="button">Enviar</button>
+  </div>
+</div>
+<script>
+  // 1) Pegá acá los dos datos de tu proyecto de Supabase (Project Settings > API)
+  const SUPABASE_URL = "sb_publishable_nk5oIkL9XRC9DWmdSx6dgA_myCtC7d4";
+  const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind3YnlzZml0bXhqYWJ5dGVvbmZkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEwNDIzNzEsImV4cCI6MjEwNjYxODM3MX0.RZ5djUjmRalQTsbF2F32NgCUu08KxpVIPj-orG3OCxU";
+
+  const API = SUPABASE_URL + "/rest/v1/comments";
+  const H = { apikey: SUPABASE_KEY, "Content-Type": "application/json" };
+  const list = document.getElementById("list"), status = document.getElementById("status");
+  const txt = document.getElementById("txt"), nm = document.getElementById("nm"), go = document.getElementById("go");
+  const configured = !SUPABASE_URL.includes("PEGÁ") && !SUPABASE_KEY.includes("PEGÁ");
+
+  function say(t) { status.textContent = t; }
+
+  async function render() {
+    if (!configured) { list.textContent = ""; say("Falta pegar la URL y la clave de Supabase."); return; }
+    try {
+      const r = await fetch(API + "?select=name,text,created_at&order=created_at.desc&limit=200", { headers: H });
+      if (!r.ok) throw new Error();
+      const all = await r.json();
+      list.textContent = "";
+      if (!all.length) { const p = document.createElement("div"); p.className = "msg"; p.textContent = "Todavía no hay mensajes."; list.appendChild(p); return; }
+      all.forEach(c => {
+        const d = document.createElement("div"); d.className = "c";
+        const b = document.createElement("b"); b.textContent = c.name || "anónimo";
+        const f = document.createElement("span"); f.className = "d"; f.textContent = new Date(c.created_at).toLocaleDateString("es");
+        const t = document.createElement("div"); t.className = "t"; t.textContent = c.text;
+        d.append(b, f, t); list.appendChild(d);
+      });
+      list.scrollTop = 0;
+    } catch (e) { say("No se pudieron cargar los mensajes."); }
+  }
+
+  go.addEventListener("click", async () => {
+    const text = txt.value.trim();
+    if (!text) { txt.focus(); return; }
+    if (!configured) { say("Falta pegar la URL y la clave de Supabase."); return; }
+    try { if (Date.now() - Number(localStorage.getItem("gb-last") || 0) < 30000) { say("Esperá unos segundos."); return; } } catch (e) {}
+    go.disabled = true; say("Enviando...");
+    try {
+      const r = await fetch(API, { method: "POST", headers: { ...H, Prefer: "return=minimal" }, body: JSON.stringify({ name: nm.value.trim(), text }) });
+      if (!r.ok) throw new Error();
+      try { localStorage.setItem("gb-last", String(Date.now())); } catch (e) {}
+      txt.value = ""; say("¡Gracias!");
+      await render();
+    } catch (e) { say("No se pudo enviar. Probá de nuevo."); }
+    go.disabled = false;
+  });
+  render();
+</script>
+</body>
+</html>
